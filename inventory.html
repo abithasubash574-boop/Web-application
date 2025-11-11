@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini Inventory Management System</title>
+<style>
+    body {
+        font-family: 'Segoe UI', sans-serif;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 0;
+    }
+    header {
+        background-color: #4CAF50;
+        color: white;
+        text-align: center;
+        padding: 15px 0;
+        font-size: 22px;
+        font-weight: bold;
+    }
+    .container {
+        width: 90%;
+        margin: 20px auto;
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 0 8px rgba(0,0,0,0.2);
+    }
+    input, button {
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        font-size: 14px;
+    }
+    button {
+        background-color: #4CAF50;
+        color: white;
+        cursor: pointer;
+    }
+    button:hover { opacity: 0.9; }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: center;
+    }
+    th {
+        background-color: #4CAF50;
+        color: white;
+    }
+    .btn-group, .search-bar {
+        margin-top: 15px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    #loginBox {
+        width: 320px;
+        margin: 100px auto;
+        background: white;
+        padding: 25px;
+        border-radius: 10px;
+        box-shadow: 0 0 8px rgba(0,0,0,0.2);
+        text-align: center;
+    }
+    #loginBox h2 {
+        margin-bottom: 20px;
+        color: #4CAF50;
+    }
+</style>
+</head>
+<body>
+<header>Mini Inventory Management System</header>
+
+<!-- LOGIN SCREEN -->
+<div id="loginBox">
+    <h2>Login</h2>
+    <input type="text" id="username" placeholder="Username"><br><br>
+    <input type="password" id="password" placeholder="Password"><br><br>
+    <button onclick="login()">Login</button>
+</div>
+
+<!-- MAIN APP SCREEN -->
+<div class="container" id="appContainer" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2>Welcome, <span id="userDisplay"></span></h2>
+        <button style="background-color:#f44336;" onclick="logout()">Logout</button>
+    </div>
+
+    <div class="form-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:15px;">
+        <input type="text" id="name" placeholder="Product Name">
+        <input type="text" id="category" placeholder="Category">
+        <input type="number" id="quantity" placeholder="Quantity">
+        <input type="number" id="price" placeholder="Price">
+    </div>
+
+    <div class="btn-group">
+        <button onclick="addItem()">Add Item</button>
+        <button onclick="updateItem()">Update</button>
+        <button onclick="deleteItem()">Delete</button>
+        <button onclick="showLowStock()">Low Stock</button>
+        <button onclick="exportCSV()">Export CSV</button>
+        <input type="file" id="importFile" accept=".csv" onchange="importCSV()" style="background-color:#795548;">
+        <button onclick="clearFields()">Clear</button>
+    </div>
+
+    <div class="search-bar">
+        <input type="text" id="search" placeholder="Search product by name..." onkeyup="searchItem()">
+        <button onclick="displayItems()">View All</button>
+    </div>
+
+    <table id="inventoryTable">
+        <thead>
+            <tr>
+                <th>ID</th><th>Name</th><th>Category</th><th>Quantity</th><th>Price</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+    // Default admin credentials
+    const USERS = [
+        { username: "admin", password: "admin123", role: "Admin" },
+        { username: "user", password: "user123", role: "User" }
+    ];
+
+    let selectedId = null;
+    let currentUser = null;
+
+    // --- LOGIN SYSTEM ---
+    function login() {
+        const uname = document.getElementById("username").value.trim();
+        const pass = document.getElementById("password").value.trim();
+        const user = USERS.find(u => u.username === uname && u.password === pass);
+
+        if (user) {
+            currentUser = user;
+            localStorage.setItem("loggedInUser", JSON.stringify(user));
+            document.getElementById("loginBox").style.display = "none";
+            document.getElementById("appContainer").style.display = "block";
+            document.getElementById("userDisplay").innerText = `${user.username} (${user.role})`;
+            displayItems();
+        } else {
+            alert("Invalid credentials! Try again.");
+        }
+    }
+
+    function logout() {
+        localStorage.removeItem("loggedInUser");
+        currentUser = null;
+        document.getElementById("appContainer").style.display = "none";
+        document.getElementById("loginBox").style.display = "block";
+        document.getElementById("username").value = "";
+        document.getElementById("password").value = "";
+    }
+
+    // Restore session if user was logged in
+    window.onload = () => {
+        const user = JSON.parse(localStorage.getItem("loggedInUser"));
+        if (user) {
+            currentUser = user;
+            document.getElementById("loginBox").style.display = "none";
+            document.getElementById("appContainer").style.display = "block";
+            document.getElementById("userDisplay").innerText = `${user.username} (${user.role})`;
+        }
+        displayItems();
+    };
+
+    // --- INVENTORY SYSTEM ---
+    function getInventory() {
+        return JSON.parse(localStorage.getItem("inventory") || "[]");
+    }
+
+    function saveInventory(data) {
+        localStorage.setItem("inventory", JSON.stringify(data));
+    }
+
+    function displayItems(items = getInventory()) {
+        const tbody = document.querySelector("#inventoryTable tbody");
+        tbody.innerHTML = "";
+        items.forEach((item, index) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td>${index + 1}</td>
+                <td>${item.name}</td>
+                <td>${item.category}</td>
+                <td>${item.quantity}</td>
+                <td>${item.price}</td>
+            `;
+            row.onclick = () => selectItem(index);
+            tbody.appendChild(row);
+        });
+    }
+
+    function addItem() {
+        if (currentUser.role !== "Admin") return alert("Only Admins can add items!");
+        const name = document.getElementById("name").value.trim();
+        const category = document.getElementById("category").value.trim();
+        const quantity = parseInt(document.getElementById("quantity").value);
+        const price = parseFloat(document.getElementById("price").value);
+
+        if (!name || isNaN(quantity) || isNaN(price)) {
+            alert("Please fill in Name, Quantity, and Price correctly!");
+            return;
+        }
+
+        const data = getInventory();
+        data.push({ name, category, quantity, price });
+        saveInventory(data);
+        clearFields();
+        displayItems();
+        alert("Item added successfully!");
+    }
+
+    function selectItem(index) {
+        const data = getInventory()[index];
+        document.getElementById("name").value = data.name;
+        document.getElementById("category").value = data.category;
+        document.getElementById("quantity").value = data.quantity;
+        document.getElementById("price").value = data.price;
+        selectedId = index;
+    }
+
+    function updateItem() {
+        if (currentUser.role !== "Admin") return alert("Only Admins can update items!");
+        if (selectedId === null) {
+            alert("Select an item to update!");
+            return;
+        }
+        const data = getInventory();
+        data[selectedId] = {
+            name: document.getElementById("name").value.trim(),
+            category: document.getElementById("category").value.trim(),
+            quantity: parseInt(document.getElementById("quantity").value),
+            price: parseFloat(document.getElementById("price").value)
+        };
+        saveInventory(data);
+        clearFields();
+        displayItems();
+        alert("Item updated successfully!");
+        selectedId = null;
+    }
+
+    function deleteItem() {
+        if (currentUser.role !== "Admin") return alert("Only Admins can delete items!");
+        if (selectedId === null) {
+            alert("Select an item to delete!");
+            return;
+        }
+        const data = getInventory();
+        data.splice(selectedId, 1);
+        saveInventory(data);
+        clearFields();
+        displayItems();
+        alert("Item deleted!");
+        selectedId = null;
+    }
+
+    function showLowStock() {
+        const items = getInventory().filter(item => item.quantity < 5);
+        displayItems(items);
+        if (items.length === 0) alert("No low-stock items!");
+    }
+
+    function searchItem() {
+        const keyword = document.getElementById("search").value.toLowerCase();
+        const items = getInventory().filter(i => i.name.toLowerCase().includes(keyword));
+        displayItems(items);
+    }
+
+    function clearFields() {
+        document.getElementById("name").value = "";
+        document.getElementById("category").value = "";
+        document.getElementById("quantity").value = "";
+        document.getElementById("price").value = "";
+        document.getElementById("search").value = "";
+        selectedId = null;
+    }
+
+    // --- CSV FUNCTIONS ---
+    function exportCSV() {
+        const data = getInventory();
+        if (data.length === 0) {
+            alert("No data to export!");
+            return;
+        }
+        let csv = "ID,Name,Category,Quantity,Price\n";
+        data.forEach((item, index) => {
+            csv += `${index + 1},${item.name},${item.category},${item.quantity},${item.price}\n`;
+        });
+        const blob = new Blob([csv], { type: "text/csv" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "inventory.csv";
+        link.click();
+    }
+
+    function importCSV() {
+        if (currentUser.role !== "Admin") return alert("Only Admins can import CSV!");
+        const file = document.getElementById("importFile").files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const lines = e.target.result.split("\n").slice(1);
+            const data = getInventory();
+            lines.forEach(line => {
+                const [id, name, category, quantity, price] = line.split(",");
+                if (name && quantity && price) {
+                    data.push({ name, category, quantity: parseInt(quantity), price: parseFloat(price) });
+                }
+            });
+            saveInventory(data);
+            displayItems();
+            alert("CSV imported successfully!");
+        };
+        reader.readAsText(file);
+    }
+</script>
+</body>
+</html>
